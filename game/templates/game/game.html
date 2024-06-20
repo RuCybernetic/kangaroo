@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Игра Кенгуру</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <style>
+        #gameCanvas {
+            border: 1px solid black;
+            display: block;
+            margin: 20px auto;
+            width: 100%;
+            max-width: 720px;
+            height: auto;
+        }
+        .kangaroo-option {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .kangaroo-option img {
+            margin-right: 10px;
+        }
+        .form-group {
+            margin-bottom: 10px;
+        }
+    </style>
+    {% load static %}
+</head>
+<body>
+    <h1>Игра Кенгуру</h1>
+    <p>Ваши монеты: <span id="coins">{{ request.user.coins }}</span></p>
+    <form method="post" id="betForm">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <div class="form-group">
+            <label>Выберите кенгуру для ставки:</label>
+            <div class="kangaroo-option">
+                <input type="radio" name="kangaroo" value="Кенгуру 1" id="kangaroo1">
+                <label for="kangaroo1"><img src="{% static 'game/kangaroo1.png' %}" width="50"> Кенгуру 1</label>
+            </div>
+            <div class="kangaroo-option">
+                <input type="radio" name="kangaroo" value="Кенгуру 2" id="kangaroo2">
+                <label for="kangaroo2"><img src="{% static 'game/kangaroo2.png' %}" width="50"> Кенгуру 2</label>
+            </div>
+            <div class="kangaroo-option">
+                <input type="radio" name="kangaroo" value="Кенгуру 3" id="kangaroo3">
+                <label for="kangaroo3"><img src="{% static 'game/kangaroo3.png' %}" width="50"> Кенгуру 3</label>
+            </div>
+            <div class="kangaroo-option">
+                <input type="radio" name="kangaroo" value="Кенгуру 4" id="kangaroo4">
+                <label for="kangaroo4"><img src="{% static 'game/kangaroo4.png' %}" width="50"> Кенгуру 4</label>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="id_amount">Сумма ставки:</label>
+            <input type="number" name="amount" id="id_amount">
+        </div>
+        <button type="submit">Сделать ставку</button>
+    </form>
+    <div id="result"></div>
+    <canvas id="gameCanvas" width="720" height="720"></canvas>
+    <script>
+        var kangarooImages = {
+            'Кенгуру 1': "{% static 'game/kangaroo1.png' %}",
+            'Кенгуру 2': "{% static 'game/kangaroo2.png' %}",
+            'Кенгуру 3': "{% static 'game/kangaroo3.png' %}",
+            'Кенгуру 4': "{% static 'game/kangaroo4.png' %}"
+        };
+        var centerImage = "{% static 'game/center.png' %}";
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var canvas = document.getElementById('gameCanvas');
+            var ctx = canvas.getContext('2d');
+            var BLOCKS = 9;
+            var MARGIN = 5;
+            var SIZE_BLOCK = (canvas.width - (BLOCKS + 1) * MARGIN) / BLOCKS;
+            var CENTER = { x: Math.floor(BLOCKS / 2), y: Math.floor(BLOCKS / 2) };
+            var kangaroos = [
+                { x: 0, y: 0, image: new Image(), name: 'Кенгуру 1', steps: 0, at_center: false },
+                { x: 0, y: BLOCKS - 1, image: new Image(), name: 'Кенгуру 2', steps: 0, at_center: false },
+                { x: BLOCKS - 1, y: 0, image: new Image(), name: 'Кенгуру 3', steps: 0, at_center: false },
+                { x: BLOCKS - 1, y: BLOCKS - 1, image: new Image(), name: 'Кенгуру 4', steps: 0, at_center: false }
+            ];
+
+            kangaroos.forEach(function(kangaroo) {
+                kangaroo.image.src = kangarooImages[kangaroo.name];
+            });
+
+            var centerImageObj = new Image();
+            centerImageObj.src = centerImage;
+
+            function drawGridAndKangaroos() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                for (var row = 0; row < BLOCKS; row++) {
+                    for (var col = 0; col < BLOCKS; col++) {
+                        var x = col * (SIZE_BLOCK + MARGIN) + MARGIN;
+                        var y = row * (SIZE_BLOCK + MARGIN) + MARGIN;
+                        ctx.fillStyle = '#828282';
+                        ctx.fillRect(x, y, SIZE_BLOCK, SIZE_BLOCK);
+                    }
+                }
+
+                kangaroos.forEach(function(kangaroo) {
+                    if (!kangaroo.at_center) {
+                        var x = kangaroo.x * (SIZE_BLOCK + MARGIN) + MARGIN;
+                        var y = kangaroo.y * (SIZE_BLOCK + MARGIN) + MARGIN;
+                        ctx.drawImage(kangaroo.image, x, y, SIZE_BLOCK, SIZE_BLOCK);
+                    }
+                });
+
+                var centerX = CENTER.x * (SIZE_BLOCK + MARGIN) + MARGIN;
+                var centerY = CENTER.y * (SIZE_BLOCK + MARGIN) + MARGIN;
+                ctx.drawImage(centerImageObj, centerX, centerY, SIZE_BLOCK, SIZE_BLOCK);
+            }
+
+            function moveKangaroo(kangaroo) {
+                if (Math.abs(kangaroo.x - CENTER.x) <= 1 && Math.abs(kangaroo.y - CENTER.y) <= 1) {
+                    kangaroo.x = CENTER.x;
+                    kangaroo.y = CENTER.y;
+                    kangaroo.at_center = true;
+                    return;
+                }
+
+                var directions = [
+                    { dx: 0, dy: 1 }, { dx: 0, dy: -1 },
+                    { dx: 1, dy: 0 }, { dx: -1, dy: 0 },
+                    { dx: 1, dy: 1 }, { dx: 1, dy: -1 },
+                    { dx: -1, dy: 1 }, { dx: -1, dy: -1 }
+                ];
+                directions.sort(function() { return 0.5 - Math.random(); });
+
+                for (var i = 0; i < directions.length; i++) {
+                    var newX = kangaroo.x + directions[i].dx;
+                    var newY = kangaroo.y + directions[i].dy;
+                    if (newX >= 0 && newX < BLOCKS && newY >= 0 && newY < BLOCKS) {
+                        kangaroo.x = newX;
+                        kangaroo.y = newY;
+                        kangaroo.steps++;
+                        break;
+                    }
+                }
+            }
+
+            function gameLoop() {
+                var allAtCenter = kangaroos.every(function(kangaroo) {
+                    return kangaroo.at_center;
+                });
+
+                if (!allAtCenter) {
+                    kangaroos.forEach(function(kangaroo) {
+                        if (!kangaroo.at_center) {
+                            moveKangaroo(kangaroo);
+                        }
+                    });
+                    drawGridAndKangaroos();
+                    setTimeout(gameLoop, 2000);
+                } else {
+                    var resultText = "Результаты прыжков кенгуру:<br>";
+                    kangaroos.forEach(function(kangaroo) {
+                        resultText += kangaroo.name + ": " + kangaroo.steps + " прыгов<br>";
+                    });
+
+                    // Найти кенгуру с минимальным количеством прыжков, который достиг центра
+                    var winningKangaroo = kangaroos.filter(function(k) { return k.at_center; })
+                                                   .reduce(function(prev, curr) {
+                                                       return (prev.steps < curr.steps) ? prev : curr;
+                                                   });
+
+                    var selectedKangaroo = $('input[name="kangaroo"]:checked').val();
+                    var amount = parseInt($('#id_amount').val());
+                    var currentCoins = parseInt($('#coins').text());
+                    var winnings = amount + (amount * 0.5);
+
+                    if (selectedKangaroo === winningKangaroo.name) {
+                        resultText += "Поздравляем! Ваша ставка выиграла! Вы получаете " + winnings + " монет.";
+                        currentCoins += winnings;
+                    } else {
+                        resultText += "К сожалению, ваша ставка не выиграла.";
+                    }
+
+                    $('#coins').text(currentCoins);
+                    $('#result').html(resultText);
+
+                    // Сохранение изменений в монетах на сервере
+                    $.ajax({
+                        url: '/update_coins/',
+                        method: 'POST',
+                        data: {
+                            coins: currentCoins,
+                            csrfmiddlewaretoken: $('input[name="csrfmiddlewaretoken"]').val()
+                        },
+                        success: function(response) {
+                            console.log('Монеты обновлены успешно');
+                        },
+                        error: function(response) {
+                            console.log('Ошибка при обновлении монет');
+                        }
+                    });
+                }
+            }
+
+            $('#betForm').on('submit', function(e) {
+                e.preventDefault();
+                var amount = parseInt($('#id_amount').val());
+                var currentCoins = parseInt($('#coins').text());
+                $('#coins').text(currentCoins - amount);
+                $.post($(this).attr('action'), $(this).serialize(), function() {
+                    drawGridAndKangaroos();
+                    setTimeout(gameLoop, 2000);
+                });
+            });
+        });
+    </script>
+</body>
+</html>
